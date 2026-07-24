@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Data (too big for GitHub)
+data/docs/
+data/chroma_db/
+
+# Node
+node_modules/
+dist/
+
+# Env files
+.env.local
+*.env
+
+# Local guides — keep OUT of repo
+tax_assistant_project_prompt.md
+CLAUDE_CODE_PROJECT_RULES.md

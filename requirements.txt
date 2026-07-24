@@ -1,0 +1,20 @@
+# ─── LLM + framework ───
+langchain
+langchain-community
+langchain-groq
+langchain-chroma
+langgraph
+
+# ─── embeddings + vector store ───
+sentence-transformers
+chromadb
+
+# ─── PDF parsing ───
+pymupdf
+
+# ─── backend ───
+fastapi
+uvicorn[standard]
+psycopg2-binary
+python-dotenv
+pydantic
