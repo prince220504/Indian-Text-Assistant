@@ -16,6 +16,8 @@ dist/
 .env.local
 *.env
 
-# Local guides — keep OUT of repo
+# Local guides + context files — keep OUT of repo
 tax_assistant_project_prompt.md
 CLAUDE_CODE_PROJECT_RULES.md
+CLAUDE.md
+PROJECT_LOG.md
