@@ -17,7 +17,6 @@ dist/
 *.env
 
 # Local guides + context files — keep OUT of repo
-tax_assistant_project_prompt.md
-CLAUDE_CODE_PROJECT_RULES.md
+claude-help/
 CLAUDE.md
 PROJECT_LOG.md
