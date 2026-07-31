@@ -5,8 +5,11 @@ langchain-groq
 langchain-chroma
 langgraph
 
+requests
+
 # ─── embeddings + vector store ───
 sentence-transformers
+langchain-huggingface
 chromadb
 
 # ─── PDF parsing ───
