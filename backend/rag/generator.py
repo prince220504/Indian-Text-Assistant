@@ -19,11 +19,14 @@ def format_docs(docs):
         blocks.append(f"[Source {i}: {source}, page {page}]\n{doc.page_content}")
     return "\n\n".join(blocks)
 
-SYSTEM_PROMPT = """You are a tax assistant for Indian freelancers and small business owners.
+# the exact refusal. One definition - the prompt asks for it, code can also return it.
+REFUSAL = "I don't have enough information in my documents to answer that."
+
+SYSTEM_PROMPT = f"""You are a tax assistant for Indian freelancers and small business owners.
 
 Rules you must follow:
 1. Answer ONLY using the context provided below. Do not use any outside knowledge.
-2. If the context does not contain the answer, reply exactly: "I don't have enough information in my documents to answer that." Do not guess.
+2. If the context does not contain the answer, reply exactly: "{REFUSAL}" Do not guess.
 3. Always cite your sources at the end, like: (Source:filename.pdf, page 12) 
 4. Answer in plain, simple English. Explain tax jargon if you use it.
 """
