@@ -1,4 +1,5 @@
-from generator import answer, llm   # reuse Day 7's pipeline + the same Groq client
+from generator import llm   # reuse Day 7's pipeline + the same Groq client
+from graph import ask    # Day 9-11 graph replaces Day 7's answer()
 
 # conversation so far: list of (question, answer) tuples.
 # plain list, not conversationBufferMemory - it IS a list with ceremony 
@@ -33,7 +34,7 @@ def condense(question):
 def chat(question):
     """One conversational turn: resolve the follow-up, answer it, remember it."""
     standalone = condense(question)   # memory applied BEFORE retrieval
-    reply = answer(standalone)   # Day 6 + Day 7 pipeline, untouched and stateless
+    reply = ask(standalone)   # full graph: route -> retrieve -> grade -> generate
 
     history.append((question, reply))   # store what the user actually typed, not the rewrite
     return reply
