@@ -1,7 +1,7 @@
 import os 
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-from retriever import retrieve   # our Day 6 component
+from .retriever import retrieve   # our Day 6 component
 
 # .env sits at repo root; load it so GROQ_API_KEY lands in os.environ
 load_dotenv()

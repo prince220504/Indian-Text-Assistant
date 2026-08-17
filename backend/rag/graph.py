@@ -3,8 +3,8 @@
 from typing import TypedDict, List
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
-from retriever import retrieve
-from generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL
+from .retriever import retrieve
+from .generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL
 
 class GraphState(TypedDict):
     """The file folder that moves desk to desk.

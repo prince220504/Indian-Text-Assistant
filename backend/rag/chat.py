@@ -1,5 +1,5 @@
-from generator import llm   # reuse Day 7's pipeline + the same Groq client
-from graph import ask    # Day 9-11 graph replaces Day 7's answer()
+from .generator import llm   # reuse Day 7's pipeline + the same Groq client
+from .graph import ask    # Day 9-11 graph replaces Day 7's answer()
 
 # conversation so far: list of (question, answer) tuples.
 # plain list, not conversationBufferMemory - it IS a list with ceremony 
