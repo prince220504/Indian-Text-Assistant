@@ -38,7 +38,7 @@ Question: {question}"""
 
 # module-level: build the client once, reuse for every question
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
     temperature=0,  # factual task - same question must give same answer
 )
 
