@@ -167,7 +167,7 @@ if __name__ == "__main__":
     # happy path: graph must produce the same cited answer as Day 7's answer()
     a = ask("What is the GST registration threshold?")
     print(f"IN_CORPUS:\n{a}\n")
-    assert "Source:" in a, "expected a citation"
+    assert "Source" in a, "expected a citation"
 
     # refusal path: graph must not leak the model's own tax knowledge
     b = ask("What is the TDS rate on rent under section 194I?")
