@@ -3,8 +3,8 @@
 from typing import TypedDict, List
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
-from retriever import retrieve
-from generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL
+from .retriever import retrieve
+from .generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL
 
 class GraphState(TypedDict):
     """The file folder that moves desk to desk.
@@ -157,21 +157,36 @@ workflow.add_edge("generate", END)      # file leaves the office
 # compile once at import time - turns the description into a runnable
 app = workflow.compile()
 
-def ask(question: str) -> str:
-    """Public entry point. Same signature as Day 7's answer()."""
+def unique_sources(docs):
+    """Pull {source, page} off each chunk's metadata, drop duplicates, keep order.
+    
+    Day 4 stamped this metadata on. We read it - the model never retypes it.
+    """
+    seen = []
+    for d in docs:
+        s = {"source": d.metadata["source"], "page": d.metadata["page"]}
+        if s not in seen:        # 5 docs max - a list scan is cheaper than making dicts hashable
+            seen.append(s)
+    return seen
+
+def ask(question: str) -> dict:
+    """Public entry point. Returns the answer AND the citations behind it."""
     # retries must be seeded - nodes read it before anything writes it 
-    result = app.invoke({"question": question, "retries": 0, "documents": []})     # seed the file with one key
-    return result["answer"]        # full final state comes back
+    result = app.invoke({"question": question, "retries": 0, "documents": []})    # seed the file with one key
+    # documents is seeded to [] so this key always exists - refusal path just yields no sources
+    return {"answer": result["answer"], "sources": unique_sources(result["documents"])}      # full final state comes back
 
 if __name__ == "__main__":
     # happy path: graph must produce the same cited answer as Day 7's answer()
     a = ask("What is the GST registration threshold?")
-    print(f"IN_CORPUS:\n{a}\n")
-    assert "Source:" in a, "expected a citation"
+    print(f"IN_CORPUS:\n{a['answer']}\nSOURCES: {a['sources']}\n")
+    assert a["sources"], "no citation returned"      # our code guarantees this
+    assert all(s["source"].endswith(".pdf") for s in a["sources"]), "bad filename"
 
     # refusal path: graph must not leak the model's own tax knowledge
     b = ask("What is the TDS rate on rent under section 194I?")
-    print(f"OUT-OF-CORPUS:\n{b}\n")
-    assert "don't have enough information" in b, "model hallucinated outside its corpus"
+    print(f"OUT-OF-CORPUS:\n{b['answer']}\nSOURCES: {b['sources']}\n")
+    assert "don't have enough information" in b["answer"], "model hallucinated outside its corpus"
+    assert b["sources"] == [], "refusal must cite nothing"
 
     print("OK - graph matches the Day 7 pipeline")
