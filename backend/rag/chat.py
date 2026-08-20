@@ -33,11 +33,12 @@ def chat(question, session_id):
     """One conversational turn: resolve the follow-up, answer it, remember it."""
     history = get_history(session_id)   # per-session, from Postgres - no global, no mixing
     standalone = condense(question, history)   # memory applied BEFORE retrieval
-    reply = ask(standalone)   # full graph: route -> retrieve -> grade -> generate
+    result = ask(standalone)   # full graph: route -> retrieve -> grade -> generate
+    # {"answer": ..., "sources": [...]}
 
     save_message(session_id, "user", question)   # store what the user actually typed, not the rewrite
-    save_message(session_id, "assistant", reply)
-    return reply
+    save_message(session_id, "assistant", result["answer"])   # only prose goes in history
+    return result
 
 if __name__ == "__main__":
     import uuid
@@ -47,7 +48,8 @@ if __name__ == "__main__":
     sid = f"selftest-{uuid.uuid4()}"     # isolated session, so reruns start with empty memory
 
     q1 = "What is the GST registration threshold?"
-    print(f"Q1: {q1}\nA1: {chat(q1, sid)}\n")
+    a1 = chat(q1, sid)
+    print(f"Q1: {q1}\nA1: {a1['answer']}\nSOURCES: {a1['sources']}\n")
 
     q2 = "And for services?"
     standalone = condense(q2, get_history(sid))   # extra call, only so we can SEE the rewrite
@@ -55,8 +57,8 @@ if __name__ == "__main__":
     assert "GST" in standalone, "condense lost the topic from history"
 
     a2 = chat(q2, sid)
-    print(f"A2: {a2}\n")
-    assert "don't have enough information" not in a2, "follow-up broke retrieval"
+    print(f"A2: {a2['answer']}\nSOURCES: {a2['sources']}\n")
+    assert "don't have enough information" not in a2["answer"], "follow-up broke retrieval"
 
     assert len(get_history(sid)) == 4, "turns not persisted as 2 rows each"
 
