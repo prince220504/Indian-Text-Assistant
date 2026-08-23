@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function App() {
   // the whiteboard: every message so far
@@ -8,15 +8,38 @@ function App() {
   // what's currently typed in the input box
   const [input, setInput] = useState("");
 
-  // one session id for the whole conversation.
-  // the arrow function form runs ONLY on first render --
-  // useState(crypto.randomUUID()) would generate a new id every render
-  // (React throws it away, but it still runs -- wasteful and misleading)
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [historyLoading, setHistoryLoading] = useState(true)
+
+  // one session id for the whole conversation, now surviving refresh.
+  // localStorage holds only the KEY -- the messages themselves live the Postgres.
+  const [sessionId] = useState(() => {
+    const saved = localStorage.getItem("sessionId");
+    if (saved) return saved;
+    const fresh = crypto.randomUUID();
+    localStorage.setItem("sessionId", fresh);
+    return fresh;
+  });
 
   const [loading, setLoading] = useState(false);
 
-  
+  // on mount: ask the server what this session already said.
+  // [] = run once. Postgres is the source of truth; React just mirrors it.
+  useEffect(() => {
+    async function loadHistory() {
+      try {
+        const res = await fetch(`http://localhost:8000/history/${sessionId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const rows = await res.json();     // [{role, content}, ...]  -- note: content, not text
+        setMessages(rows.map((r) => ({ role: r.role, text: r.content })))
+      } catch (err) {
+        console.error("history load failed:", err);    // empty chat is a survivable failure
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+    loadHistory();
+  }, []);
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!input.trim() || loading) return;      // no double-send while one is in flight
@@ -44,7 +67,7 @@ function App() {
         { role:"assistant", text: `Error: ${err.message}` },
       ]);
     } finally {
-      setLoading(false);   // runs on success AND on failure -- never leave it stuck spinning
+      setHistoryLoading(false);   // runs on success AND on failure -- never leave it stuck spinning
     }
   }
 
@@ -55,6 +78,7 @@ function App() {
 
         {/* the conversation */}
         <div className="space-y-3 mb-4 min-h-[200px]">
+          {historyLoading && <p className="text-gray-400">Loading history...</p>}
           {messages.map((m, i) => (
             <div key={i} className={m.role === "user" ? "ml-auto max-w-[80%]" : "mr-auto max-w-[80%]"}>
               <div 
