@@ -10,6 +10,7 @@ Rules:
 - Fill in anything the follow-up left implicit (topic, subject, tax type).
 - Do NOT answer the question. Output only the rewritten question, nothing else.
 - If the follow-up is already standalone, return it unchanged.
+- If the follow-up is a greeting, thanks, or not a question at all, return it UNCHANGED.
 
 Conversation:
 {history}
