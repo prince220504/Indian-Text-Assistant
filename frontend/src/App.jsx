@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import MessageBubble from "./components/MessageBubble";
 
 function App() {
   // the whiteboard: every message so far
@@ -9,6 +10,9 @@ function App() {
   const [input, setInput] = useState("");
 
   const [historyLoading, setHistoryLoading] = useState(true)
+
+  // parking ticket for the empty div at the bottom of the list
+  const bottomRef = useRef(null);
 
   // one session id for the whole conversation, now surviving refresh.
   // localStorage holds only the KEY -- the messages themselves live the Postgres.
@@ -40,6 +44,11 @@ function App() {
     loadHistory();
   }, []);
 
+  //  scroll to newest whenever the list grows or the spinner toggles
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behaviour: "smooth" });
+  }, [messages, loading]);
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!input.trim() || loading) return;      // no double-send while one is in flight
@@ -67,7 +76,7 @@ function App() {
         { role:"assistant", text: `Error: ${err.message}` },
       ]);
     } finally {
-      setHistoryLoading(false);   // runs on success AND on failure -- never leave it stuck spinning
+      setLoading(false);   // runs on success AND on failure -- never leave it stuck spinning
     }
   }
 
@@ -80,31 +89,9 @@ function App() {
         <div className="space-y-3 mb-4 min-h-[200px]">
           {historyLoading && <p className="text-gray-400">Loading history...</p>}
           {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "ml-auto max-w-[80%]" : "mr-auto max-w-[80%]"}>
-              <div 
-                className={
-                  m.role === "user"
-                  ? "bg-blue-100 p-3 rounded-lg"
-                  : "bg-gray-100 p-3 rounded-lg whitespace-pre-wrap"
-                }
-              >
-                {m.text}
-              </div>
-              {/* trustworthy citaions -- from chunk metadata, not from the model's prose */}
-              {m.sources?.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {m.sources.map((s, j) => (
-                    <span 
-                      key={j}
-                      className="text-xs bg-white border border-gray-300 rounded-full px-2 py-1 text-gray-600"
-                    >
-                      {s.source} . p.{s.page}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+            <MessageBubble key={i} message={m} />
           ))}
+          <div ref={bottomRef} />
         </div>
 
         {/* the composer */}
