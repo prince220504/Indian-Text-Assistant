@@ -46,7 +46,7 @@ function App() {
 
   //  scroll to newest whenever the list grows or the spinner toggles
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behaviour: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
   async function handleSubmit(e) {
