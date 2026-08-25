@@ -4,7 +4,7 @@ from typing import TypedDict, List
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
 from .retriever import retrieve
-from .generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL
+from .generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL, split_citations, CITE_RE
 
 class GraphState(TypedDict):
     """The file folder that moves desk to desk.
@@ -111,7 +111,12 @@ def generate_node(state: GraphState):
         ("human", USER_PROMPT.format(context=context, question=state["question"])),
     ]
 
-    return {"answer": llm.invoke(messages).content}
+    raw = llm.invoke(messages).content
+    clean, used = split_citations(raw, state["documents"])
+
+    # narrowing documents here is deliberate: after this desk the folder holds
+    # the chunks we CITED, not the 5 we fetched. unique_sources() reads it as-is.
+    return {"answer": clean, "documents": used}
 
 MAX_RETRIES = 2       # loop guard. LangGraph's recursion_limit is only a backstop.
 
@@ -182,6 +187,7 @@ if __name__ == "__main__":
     print(f"IN_CORPUS:\n{a['answer']}\nSOURCES: {a['sources']}\n")
     assert a["sources"], "no citation returned"      # our code guarantees this
     assert all(s["source"].endswith(".pdf") for s in a["sources"]), "bad filename"
+    assert not CITE_RE.search(a["answer"]), "marker must be stripped before the user sees it"
 
     # refusal path: graph must not leak the model's own tax knowledge
     b = ask("What is the TDS rate on rent under section 194I?")

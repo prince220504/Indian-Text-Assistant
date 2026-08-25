@@ -25,7 +25,7 @@ def condense(question, history):
         return question     # nothing to resolve against - and no anchor = model invents context
 
     # flatten history into plain text the LLM can read
-    convo = "\n".join(f"{role}: {content}" for role, content in history)
+    convo = "\n".join(f"{role}: {content}" for role, content, _ in history)
 
     prompt = CONDENSE_PROMPT.format(history=convo, question=question)
     return llm.invoke(prompt).content.strip()   # .strip() - this string gets embedded
@@ -38,7 +38,7 @@ def chat(question, session_id):
     # {"answer": ..., "sources": [...]}
 
     save_message(session_id, "user", question)   # store what the user actually typed, not the rewrite
-    save_message(session_id, "assistant", result["answer"])   # only prose goes in history
+    save_message(session_id, "assistant", result["answer"], result["sources"])   # answer + the chunks it cited
     return result
 
 if __name__ == "__main__":

@@ -33,8 +33,8 @@ function App() {
       try {
         const res = await fetch(`http://localhost:8000/history/${sessionId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const rows = await res.json();     // [{role, content}, ...]  -- note: content, not text
-        setMessages(rows.map((r) => ({ role: r.role, text: r.content })))
+        const rows = await res.json();     // [{role, content, sources}, ...]  -- note: content, not text
+        setMessages(rows.map((r) => ({ role: r.role, text: r.content, sources: r.sources })))
       } catch (err) {
         console.error("history load failed:", err);    // empty chat is a survivable failure
       } finally {
