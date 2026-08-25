@@ -41,7 +41,7 @@ def split_citations(text, docs):
         print("[cite] no markers found - falling back to all retrieved docs")
         return clean, docs
 
-    return clean,used 
+    return clean, used
 
 # the exact refusal. One definition - the prompt asks for it, code can also return it.
 REFUSAL = "I don't have enough information in my documents to answer that."
