@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from ..rag.chat import chat
+from ..database import get_history
 
 router = APIRouter()
 
@@ -22,3 +23,13 @@ class ChatResponse(BaseModel):
 def chat_route(req: ChatRequest):
     """Counter clerk: take the question, hand it to the graph, return answer + citations."""
     return chat(req.question, req.session_id)
+
+class Message(BaseModel):
+    role: str        # "user" or "assistant"
+    content: str
+
+@router.get("/history/{session_id}", response_model=list[Message])
+def history_route(session_id: str, limit: int = 20):
+    """Withdrawal window: hand over an id, get that session's messages back, oldest first."""
+    rows = get_history(session_id, limit)
+    return [{"role": role, "content": content} for role, content in rows]
