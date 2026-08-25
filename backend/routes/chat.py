@@ -27,9 +27,10 @@ def chat_route(req: ChatRequest):
 class Message(BaseModel):
     role: str        # "user" or "assistant"
     content: str
+    sources: list[Source] = []      # user rows and pre-migration rows have none
 
 @router.get("/history/{session_id}", response_model=list[Message])
 def history_route(session_id: str, limit: int = 20):
     """Withdrawal window: hand over an id, get that session's messages back, oldest first."""
     rows = get_history(session_id, limit)
-    return [{"role": role, "content": content} for role, content in rows]
+    return [{"role": role, "content": content, "sources": sources or []} for role, content, sources in rows]
