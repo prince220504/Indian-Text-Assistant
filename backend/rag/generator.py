@@ -46,6 +46,16 @@ def split_citations(text, docs):
 # the exact refusal. One definition - the prompt asks for it, code can also return it.
 REFUSAL = "I don't have enough information in my documents to answer that."
 
+# a greeting is not a failed question - it deserves its own words, not the refusal.
+# canned on purpose: the answer never depends on what they typed, so no LLM call.
+GREETING = """Hello! I'm a tax assistant for Indian freelancers and small business owners.
+
+I can help with two things:
+- **GST questions** answered from official government documents, with the source cited.
+- **Income tax** for FY 2025-26 under the new regime - use the calculator tab.
+
+Ask me something like *"What is the GST registration threshold?"*"""
+
 SYSTEM_PROMPT = f"""You are a tax assistant for Indian freelancers and small business owners.
 
 Rules you must follow:
