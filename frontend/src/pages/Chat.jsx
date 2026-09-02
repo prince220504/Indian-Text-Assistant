@@ -16,7 +16,7 @@ function Chat() {
 
   // one session id for the whole conversation, now surviving refresh.
   // localStorage holds only the KEY -- the messages themselves live the Postgres.
-  const [sessionId] = useState(() => {
+  const [sessionId, setSessionId] = useState(() => {
     const saved = localStorage.getItem("sessionId");
     if (saved) return saved;
     const fresh = crypto.randomUUID();
@@ -48,6 +48,15 @@ function Chat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // new chat = a new key, not a delete. The old rows stay in Postgres,
+  // keyed by an id nobody holds any more - unreachable, and cheap to keep.
+  function newChat() {
+    const fresh = crypto.randomUUID();
+    localStorage.setItem("sessionId", fresh);
+    setSessionId(fresh);
+    setMessages([]);      // the mount effect deps are [] - it will not refetch for us
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -83,7 +92,15 @@ function Chat() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="w-full max-w-2xl bg-white rounded-lg shadow p-6">
-        <h1 className="text-xl font-bold mb-4">Indian Tax Assistant</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-bold">Indian Tax Assistant</h1>
+          <button
+            onClick={newChat}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            New chat
+          </button>
+        </div>
 
         {/* the conversation */}
         <div className="space-y-3 mb-4 min-h-[200px]">
