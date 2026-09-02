@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
 from backend.routes.chat import router as chat_router
+from backend.routes.calculator import router as calculator_router
 
 app = FastAPI(title="Indian Tax Assistant API")
 
@@ -16,6 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(chat_router)     # plugs the /chat counter into the building
+app.include_router(calculator_router)     # plugs the /calculate counter into the building
 
 @app.get("/health")
 def health():
