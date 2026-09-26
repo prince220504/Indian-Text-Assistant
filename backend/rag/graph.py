@@ -4,7 +4,7 @@ from typing import TypedDict, List
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
 from .retriever import retrieve
-from .generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL, split_citations, CITE_RE
+from .generator import format_docs, SYSTEM_PROMPT, USER_PROMPT, llm, REFUSAL, GREETING, split_citations, CITE_RE
 
 class GraphState(TypedDict):
     """The file folder that moves desk to desk.
@@ -16,7 +16,7 @@ class GraphState(TypedDict):
     answer: str        # final cited answer
     retries: int       # how many times we've rewritten + retried
     grade: str         # "yes"/"no" the grader's verdict, read by the edge
-    category: str      # "GST"/"Income-Tax"/"TDS"/"General" - which counter this question belongs at
+    category: str      # "GST"/"Income-Tax"/"TDS"/"Greeting"/"General" - which counter this question belongs at
 
 GRADE_PROMPT = """You are grading whether retrieved documents are useful for answering a question.
 
@@ -34,6 +34,7 @@ Classify the question into exactly one category:
 - GST   (goods and services tax: registration, turnover, returns, input credit)
 - Income-Tax   (salary, deductions, slabs, ITR filing)
 - TDS   (tax deducted at source, sections 194x, Form 16/26AS)
+- Greeting (hello, hi, thanks, who are you, what can you do - not tax question)
 - General   (anything else, including non-tax questions)
 
 Do not answer the question. Output only the category name, nothing else.
@@ -45,7 +46,7 @@ def route_node(state: GraphState):
     raw = llm.invoke(ROUTE_PROMPT.format(question=state["question"])).content.strip()
 
     # never == a model's output (Day 10). Match loosely, default to the safe branch.
-    for name in ("GST", "Income-Tax", "TDS"):
+    for name in ("GST", "Income-Tax", "TDS", "Greeting"):
         if name.lower() in raw.lower():
             category = name
             break
@@ -55,10 +56,14 @@ def route_node(state: GraphState):
     print(f"[route] {category}")
     return {"category": category}
 
+# Greeting has its own canned reply and exits immediately.
 # corpus is GST-only today. other categories have live branches with no documents
 # behind them - send them straight to the refusal instead of burning a retry loop.
 def decide_after_route(state: GraphState):
     """Pure router. Reads the category already in state, names the next desk."""
+    if state["category"] == "Greeting":
+        return "greet"
+
     if state["category"] == "GST":
         return "retrieve"
 
@@ -69,6 +74,14 @@ def retrieve_node(state: GraphState):
     """Desk 1: fetch chunks for the question, stamp them into the file."""
     docs = retrieve(state["question"])     # Day 6 component, unchanged
     return {"documents": docs}      # only the key we changed
+
+def greet_node(state: GraphState):
+    """Desk 0.5: not a question. Hand back the canned hello and leave.
+    
+    No llm.invoke here on purpose - the reply doesn't depend on the input,
+    so there is nothing to ask the model about.
+    """
+    return {"answer": GREETING}
 
 def grade_node(state: GraphState):
     """Desk 1.5: the checker. Reads the chunks, says yes/no. Answer nothing."""
@@ -140,6 +153,7 @@ workflow.add_node("grade", grade_node)
 workflow.add_node("rewrite", rewrite_node)
 workflow.add_node("generate", generate_node)
 workflow.add_node("route", route_node)
+workflow.add_node("greet", greet_node)
 
 workflow.set_entry_point("route")    # where the file gets created
 workflow.add_edge("retrieve", "grade")   # always check before answering
@@ -147,7 +161,7 @@ workflow.add_edge("retrieve", "grade")   # always check before answering
 workflow.add_conditional_edges(
     "route",
     decide_after_route,
-    {"retrieve": "retrieve", "generate": "generate"},
+    {"retrieve": "retrieve", "generate": "generate", "greet":"greet"},
 )
 
 workflow.add_conditional_edges(
@@ -158,6 +172,7 @@ workflow.add_conditional_edges(
 
 workflow.add_edge("rewrite", "retrieve")       # the cycle: back to Desk 1 with new words
 workflow.add_edge("generate", END)      # file leaves the office
+workflow.add_edge("greet", END)     # second exit: greeting is already the answer
 
 # compile once at import time - turns the description into a runnable
 app = workflow.compile()
@@ -194,5 +209,11 @@ if __name__ == "__main__":
     print(f"OUT-OF-CORPUS:\n{b['answer']}\nSOURCES: {b['sources']}\n")
     assert "don't have enough information" in b["answer"], "model hallucinated outside its corpus"
     assert b["sources"] == [], "refusal must cite nothing"
+
+    # greeting path: not a question - must get the hello, not the refusal
+    c = ask("hii")
+    print(f"GREETING:\n{c['answer']}\nSOURCES: {c['sources']}\n")
+    assert c["answer"] == GREETING, "greeting must return the canned reply verbatim"
+    assert c["sources"] == [], "a greeting cites nothing"
 
     print("OK - graph matches the Day 7 pipeline")
