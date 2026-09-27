@@ -48,13 +48,16 @@ REFUSAL = "I don't have enough information in my documents to answer that."
 
 # a greeting is not a failed question - it deserves its own words, not the refusal.
 # canned on purpose: the answer never depends on what they typed, so no LLM call.
-GREETING = """Hello! I'm a tax assistant for Indian freelancers and small business owners.
+GREETING = GREETING = """Hello! I'm a tax assistant for Indian freelancers and small business owners.
 
-I can help with two things:
-- **GST questions** answered from official government documents, with the source cited.
-- **Income tax** for FY 2025-26 under the new regime - use the calculator tab.
+I answer from official government documents and cite the source:
+- **GST** - registration, turnover, returns, input credit.
+- **Income tax** - slabs, deductions, rebates.
+- **TDS** - rates, sections, Form 16.
 
-Ask me something like *"What is the GST registration threshold?"*"""
+Want a number instead of an explanation? The **Calculator** tab works out your income tax.
+
+Ask me something like *"What is the TDS threshold on rent?"*"""
 
 SYSTEM_PROMPT = f"""You are a tax assistant for Indian freelancers and small business owners.
 
