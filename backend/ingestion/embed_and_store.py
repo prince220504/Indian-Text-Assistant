@@ -1,7 +1,7 @@
 import os 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma 
-from chunk_docs import chunk_pdf, DOCS_DIR
+from .chunk_docs import chunk_pdf, DOCS_DIR
 
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "chroma_db")
 
