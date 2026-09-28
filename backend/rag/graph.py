@@ -56,15 +56,13 @@ def route_node(state: GraphState):
     print(f"[route] {category}")
     return {"category": category}
 
-# Greeting has its own canned reply and exits immediately.
-# corpus is GST-only today. other categories have live branches with no documents
-# behind them - send them straight to the refusal instead of burning a retry loop.
+
 def decide_after_route(state: GraphState):
     """Pure router. Reads the category already in state, names the next desk."""
     if state["category"] == "Greeting":
         return "greet"
 
-    if state["category"] == "GST":
+    if state["category"] in ("GST", "Income-Tax", "TDS"):
         return "retrieve"
 
     print(f"[decide] no documents for {state['category']} - skipping retrieval")
@@ -204,8 +202,9 @@ if __name__ == "__main__":
     assert all(s["source"].endswith(".pdf") for s in a["sources"]), "bad filename"
     assert not CITE_RE.search(a["answer"]), "marker must be stripped before the user sees it"
 
-    # refusal path: graph must not leak the model's own tax knowledge
-    b = ask("What is the TDS rate on rent under section 194I?")
+    # refusal path: corpus covers GST, income tax and TDS. professional tax is a
+    # state levy - absent from all 9 PDFs, but the model knows it from pretraining.
+    b = ask("What is the professional tax deducted from salary in Karnataka?")
     print(f"OUT-OF-CORPUS:\n{b['answer']}\nSOURCES: {b['sources']}\n")
     assert "don't have enough information" in b["answer"], "model hallucinated outside its corpus"
     assert b["sources"] == [], "refusal must cite nothing"
@@ -215,5 +214,11 @@ if __name__ == "__main__":
     print(f"GREETING:\n{c['answer']}\nSOURCES: {c['sources']}\n")
     assert c["answer"] == GREETING, "greeting must return the canned reply verbatim"
     assert c["sources"] == [], "a greeting cites nothing"
+
+    # TDS is in the corpus now - must answer with citations, not refuse
+    d = ask("What is the TDS threshold on rent per year?")
+    print(f"TDS:\n{d['answer']}\nSOURCES: {d['sources']}\n")
+    assert d["sources"], "TDS is in the corpus - must cite something"
+    assert "don't have enough information" not in d["answer"], "refused a question the corpus answers"
 
     print("OK - graph matches the Day 7 pipeline")
