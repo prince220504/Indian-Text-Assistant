@@ -17,6 +17,7 @@ pymupdf
 
 # ─── backend ───
 fastapi
+python-multipart
 uvicorn[standard]
 psycopg2-binary
 python-dotenv
