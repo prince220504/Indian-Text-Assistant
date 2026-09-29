@@ -1,7 +1,7 @@
 """The /chat counter. Owns its request/response shapes and nothing else."""
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from ..rag.chat import chat
 from ..database import get_history
 
@@ -10,6 +10,9 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     question: str
     session_id: str     # client-supplied. NOT authentication - anyone who guesses an id reads that chat (Week 5: real auth)
+    # capped here because THIS is the trust boundary - /upload's 5 MB guard doesn't protect this route.
+    doc_text: str | None = Field(None, max_length=200_000)
+    filename: str | None = None
 
 class Source(BaseModel):
     source: str     # filename, straight from Day 4's chunk metadata
@@ -22,7 +25,7 @@ class ChatResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 def chat_route(req: ChatRequest):
     """Counter clerk: take the question, hand it to the graph, return answer + citations."""
-    return chat(req.question, req.session_id)
+    return chat(req.question, req.session_id, req.doc_text, req.filename)
 
 class Message(BaseModel):
     role: str        # "user" or "assistant"
