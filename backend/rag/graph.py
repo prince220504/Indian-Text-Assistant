@@ -125,6 +125,12 @@ def generate_node(state: GraphState):
     raw = llm.invoke(messages).content
     clean, used = split_citations(raw, state["documents"])
 
+    # a refusal has no facts, so it has nothing to cite. Without this, split_citations'
+    # no-markers fallback hands back all 5 retrieved docs and the UI shows pills under
+    # "I don't have enough information" - a lie, and save_message persists it.
+    if REFUSAL in clean:
+        return {"answer":clean, "documents": []}
+
     # narrowing documents here is deliberate: after this desk the folder holds
     # the chunks we CITED, not the 5 we fetched. unique_sources() reads it as-is.
     return {"answer": clean, "documents": used}
