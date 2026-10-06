@@ -26,6 +26,11 @@ function Chat() {
 
   const [loading, setLoading] = useState(false);
 
+  // the attached Form 16 lives HERE, in the browser, for as long as the tab is open.
+  // Never stored server-side -- the session_id debt means the DB isn't safe for a payslip.
+  const [doc, setDoc] = useState(null);    // { filename, text } or null
+  const [uploading, setUploading] = useState(false);
+
   // on mount: ask the server what this session already said.
   // [] = run once. Postgres is the source of truth; React just mirrors it.
   useEffect(() => {
@@ -56,6 +61,29 @@ function Chat() {
     localStorage.setItem("sessionId", fresh);
     setSessionId(fresh);
     setMessages([]);      // the mount effect deps are [] - it will not refetch for us
+    setDoc(null);         // new conversation, old payslip goes with it 
+  }
+
+  async function handleUpload(e){
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try{
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("http://localhost:8000/upload", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setDoc({ filename: data.filename, text:data.text });
+    } catch(err) {
+      alert(`Upload failed: ${err.message}`);    // ponytail: alert, real toast when there are 3 of them
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   }
 
   async function handleSubmit(e) {
@@ -71,7 +99,12 @@ function Chat() {
       const res = await fetch("http://localhost:8000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json"},
-        body: JSON.stringify({question, session_id: sessionId}),
+        body: JSON.stringify({
+          question,
+          session_id : sessionId,
+          doc_text: doc?.text,     // undefined when nothing attached -> key  omitted by stringify
+          filename: doc?.filename,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);     // fetch won't do this for us
       const data = await res.json();        // { answer, sources }
@@ -109,6 +142,27 @@ function Chat() {
             <MessageBubble key={i} message={m} />
           ))}
           <div ref={bottomRef} />
+        </div>
+
+        {/* attachment row */}
+        <div className="flex items-center gap-2 mb-2 text-sm">
+          {doc ? (
+            <span className="flex items-center gap-2 bg-blue-50 text-blue-800 px-2 py-1 rounded">
+              @ {doc.filename}
+              {/* without this it submits the form  */}
+              <button type="button"    
+               onClick={() => setDoc(null)} 
+               className="text-blue-600 hover:text-red-600">
+                X
+              </button>
+            </span>
+          ): (
+            <label className="text-gray-500">
+              Attach Form 16 (PDF): {" "}
+              <input type="file" accept="application/pdf" onChange={handleUpload} disabled={uploading} />
+            </label>
+          )}
+          {uploading && <span className="text-gray-400">reading PDF...</span>}
         </div>
 
         {/* the composer */}
