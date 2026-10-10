@@ -17,6 +17,7 @@ class GraphState(TypedDict):
     retries: int       # how many times we've rewritten + retried
     grade: str         # "yes"/"no" the grader's verdict, read by the edge
     category: str      # "GST"/"Income-Tax"/"TDS"/"Greeting"/"General" - which counter this question belongs at
+    doc_text: str      # user's own uploaded document, if they attached one. Empty = normal corpus question.
 
 GRADE_PROMPT = """You are grading whether retrieved documents are useful for answering a question.
 
@@ -43,6 +44,12 @@ Question: {question}"""
 
 def route_node(state: GraphState):
     """Desk 0: reception. Reads the question, names the counter. Answers nothing."""
+
+    # they attached a document: it IS the context. Nothing to classify, so no LLM call.
+    if state.get("doc_text"):
+        print("[route] Form-16 (attached document)")
+        return {"category": "Form-16"}
+    
     raw = llm.invoke(ROUTE_PROMPT.format(question=state["question"])).content.strip()
 
     # never == a model's output (Day 10). Match loosely, default to the safe branch.
@@ -64,6 +71,9 @@ def decide_after_route(state: GraphState):
 
     if state["category"] in ("GST", "Income-Tax", "TDS"):
         return "retrieve"
+
+    if state["category"] == "Form-16":
+        return "generate"        # documents already in the folder -attached by ask(), not retrieved
 
     print(f"[decide] no documents for {state['category']} - skipping retrieval")
     return 'generate'    # empty documents -> generator's own refusal
@@ -124,6 +134,12 @@ def generate_node(state: GraphState):
 
     raw = llm.invoke(messages).content
     clean, used = split_citations(raw, state["documents"])
+
+    # a refusal has no facts, so it has nothing to cite. Without this, split_citations'
+    # no-markers fallback hands back all 5 retrieved docs and the UI shows pills under
+    # "I don't have enough information" - a lie, and save_message persists it.
+    if REFUSAL in clean:
+        return {"answer":clean, "documents": []}
 
     # narrowing documents here is deliberate: after this desk the folder holds
     # the chunks we CITED, not the 5 we fetched. unique_sources() reads it as-is.
@@ -187,12 +203,18 @@ def unique_sources(docs):
             seen.append(s)
     return seen
 
-def ask(question: str) -> dict:
+def ask(question: str, doc_text:str | None = None, filename: str | None = None) -> dict:
     """Public entry point. Returns the answer AND the citations behind it."""
-    # retries must be seeded - nodes read it before anything writes it 
-    result = app.invoke({"question": question, "retries": 0, "documents": []})    # seed the file with one key
-    # documents is seeded to [] so this key always exists - refusal path just yields no sources
-    return {"answer": result["answer"], "sources": unique_sources(result["documents"])}      # full final state comes back
+    # an attached document IS the context: one Document, no splitter, no embeddings, no retrieval.
+    docs = [Document(page_content=doc_text, metadata={"source":filename})] if doc_text else []
+
+    # retries must be seeded - nodes read it before anything writes it
+    result = app.invoke({"question": question, "retries":0, "documents":docs, "doc_text":doc_text})
+
+    # no pills on the attached-doc path: the text has no page numbers (Day 25) and the
+    # user is holding the file - a citation to a document in their hand is noise.
+    sources = [] if doc_text else unique_sources(result["documents"])
+    return {"answer": result["answer"], "sources":sources}
 
 if __name__ == "__main__":
     # happy path: graph must produce the same cited answer as Day 7's answer()
@@ -220,5 +242,17 @@ if __name__ == "__main__":
     print(f"TDS:\n{d['answer']}\nSOURCES: {d['sources']}\n")
     assert d["sources"], "TDS is in the corpus - must cite something"
     assert "don't have enough information" not in d["answer"], "refused a question the corpus answers"
+
+    # attached-document path: answer must come from the request body, not the corpus
+    form16 = """FORM 16 PART B
+    Employee: Test Kumar
+    Gross Salary: 1450000
+    Standard Deduction: 75000
+    Total Tax Deducted: 112500"""
+    e = ask("What is my gross salary?", doc_text=form16, filename="form16.pdf")
+    print(f"FORM-16:\n{e["answer"]}\nSOURCES: {e['sources']}\n")
+    assert "1450000" in e["answer"].replace(",", ""), "did not read the attached document"
+    assert "don't have enough information" not in e["answer"], "refused a question its own context answers"
+    assert e["sources"] == [], "attached doc has no page metadata - must cite nothing"
 
     print("OK - graph matches the Day 7 pipeline")

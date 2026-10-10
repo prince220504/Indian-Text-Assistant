@@ -30,11 +30,11 @@ def condense(question, history):
     prompt = CONDENSE_PROMPT.format(history=convo, question=question)
     return llm.invoke(prompt).content.strip()   # .strip() - this string gets embedded
 
-def chat(question, session_id):
+def chat(question, session_id, doc_text=None, filename=None):
     """One conversational turn: resolve the follow-up, answer it, remember it."""
     history = get_history(session_id)   # per-session, from Postgres - no global, no mixing
     standalone = condense(question, history)   # memory applied BEFORE retrieval
-    result = ask(standalone)   # full graph: route -> retrieve -> grade -> generate
+    result = ask(standalone, doc_text, filename)   # full graph: route -> retrieve -> grade -> generate
     # {"answer": ..., "sources": [...]}
 
     save_message(session_id, "user", question)   # store what the user actually typed, not the rewrite
