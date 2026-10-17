@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
     # 2. forged: valid base64, valid structure, signed with the WRONG secret. The real signature test.
     forged = jwt.encode({"sub": "1", "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
-                        "not-the-real-secret", algorithm=JWT_ALGORITHM)
+                        "not-the-real-secret-not-the-real-secret", algorithm=JWT_ALGORITHM)
     raises_401(forged, "Invalid")
 
     # 3. expired: OUR secret, genuine signature, exp in the past. Must say 'expired', not 'invalid'
