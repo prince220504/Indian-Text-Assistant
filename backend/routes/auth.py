@@ -22,8 +22,8 @@ TOKEN_TTL_HOURS = 24         # a stolen token is valid until this runs out - the
 
 class AuthRequest(BaseModel):
     """Both /register and /login take the same two fields, so one model serves both."""
-    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    password: str = Field(min_length=8, max_length=72)       # 72 = bcrypt's hard ceiling, see below
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", examples=["abc@example.com"])
+    password: str = Field(min_length=8, max_length=72, examples=["longenough"])       # 72 = bcrypt's hard ceiling, see below
 
 class TokenResponse(BaseModel):
     """What both endpoints hand back. The id is here so the frontend can show who  is  logged in."""
