@@ -66,23 +66,28 @@ def init_db():
         # already in there stay valid - they just have no pills.
         cur.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS sources JSONB")
 
-def save_message(session_id, role, content, sources=None):
-    """Append one message to a session's history."""
+        # migration (Day 30): who owns the row. Nullable - pre-login rows get NULL,
+        # and NULL = anything is never TRUE, so no query can ever reach them.
+        # REFERENCES = Postgres itself refuses a user_id that isn't in users.
+        cur.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)")
+
+def save_message(user_id, session_id, role, content, sources=None):
+    """Append one message to a session's history, stamped with its owner."""
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO messages (session_id, role, content, sources) VALUES (%s, %s, %s, %s)",
-            (session_id, role, content, Json(sources) if sources else None),
+            "INSERT INTO messages (user_id, session_id, role, content, sources) VALUES (%s, %s, %s, %s, %s)",
+            (user_id, session_id, role, content, Json(sources) if sources else None),
         )
 
-def get_history(session_id, limit=10):
-    """Return the last 'limit' messages for a session, oldest first, as (role, content, sources)."""
+def get_history(user_id, session_id, limit=10):
+    """Return the last 'limit' messages for ONE user's session, oldest first, as (role, content, sources)."""
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """SELECT role, content, sources FROM messages
-               WHERE session_id = %s
+               WHERE user_id = %s AND session_id = %s
                ORDER BY created_at DESC
                LIMIT %s""",
-            (session_id, limit),
+            (user_id, session_id, limit),
         )
         return cur.fetchall()[::-1]      # newest-first from SQL, flipped back to reading order
 
@@ -94,19 +99,25 @@ if __name__ == "__main__":
 
     sid = f"selftest-{uuid.uuid4()}"
 
-    save_message(sid, "user", "What is the GST registration threshold?")
-    save_message(sid, "assistant", "Rs 40 lakh for goods.", [{"source": "gst.pdf", "page": 1}])
+    # two REAL accounts - REFERENCES means a made-up user_id like 1 gets refuses by Postgres
+    owner = create_user(f"owner-{uuid.uuid4()}@example.com", "longenough")
+    stranger = create_user(f"stranger-{uuid.uuid4()}@example.com", "longenough")
 
-    rows = get_history(sid)
+    save_message(owner, sid, "user", "What is the GST registration threshold?")
+    save_message(owner, sid, "assistant", "Rs 40 lakh for goods.", [{"source": "gst.pdf", "page":1}])
+
+    rows = get_history(owner, sid)
     assert rows[0][2] is None, "user must have no sources"
-    assert rows[1][2] == [{"source": "gst.pdf", "page": 1}], "sources did not survive the JSONB round-trip"
+    assert rows[1][2] == [{"source": "gst.pdf", "page":1}], "sources did not survive the JSONB round-trip"
     print(rows)
 
-    assert len(rows) == 2, f"expected 2 rows, got {len(rows)}" 
+    assert len(rows) == 2, f"expected 2 rows, got {len(rows)}"
     assert rows[0][0] == "user", "history came back in the wrong order"
-
-    assert get_history(f"other-{uuid.uuid4()}") == [], "session filter leaked rows"
-
+    
+    assert get_history(owner, f"other-{uuid.uuid4()}") == [], "session filter leaked rows"
+    # The S3 test: right session_id, wrong person -> nothing. Not a 404, not a error - just empty.
+    assert get_history(stranger, sid) == [], "user filter leaked rows - a stranger read someone else's chat"
+    
     print("OK - write, read, order, isolation")
 
     # --- users (Day 28) ---

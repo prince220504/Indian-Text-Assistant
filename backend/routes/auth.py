@@ -3,7 +3,8 @@
 import os 
 import jwt          # PyJWT. The import name is 'jwt', NOT 'pyjwt'
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials 
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from backend.database import create_user, get_user_by_email, verify_password
@@ -40,7 +41,7 @@ def create_token(user_id, email):
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 def decode_token(token):
-    """Check the stamp. Returns the user_id, or raises 401. The only gate S3 will use."""
+    """Check the stamp. Returns the user_id, or raises 401. current_user is the only caller."""
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM]) 
     except jwt.ExpiredSignatureError:
@@ -49,6 +50,12 @@ def decode_token(token):
         raise HTTPException(401, "Invalid token.")
     return int(payload["sub"])
 
+bearer = HTTPBearer()     # reads "Authorization: Bearer <token>"; 401 if the header is missing
+
+def current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
+    """The gate. A route that takes Depends(current_user) gets a verified user_id - or never runs."""
+    return decode_token(creds.credentials)     # .credentials = the token string, "Bearer" already stripped
+    
 @router.post("/register", response_model=TokenResponse)
 def register_route(body: AuthRequest):
     """Make an account and log them straight in - no 'now please log in' round trip."""
