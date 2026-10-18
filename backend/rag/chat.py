@@ -30,37 +30,38 @@ def condense(question, history):
     prompt = CONDENSE_PROMPT.format(history=convo, question=question)
     return llm.invoke(prompt).content.strip()   # .strip() - this string gets embedded
 
-def chat(question, session_id, doc_text=None, filename=None):
-    """One conversational turn: resolve the follow-up, answer it, remember it."""
-    history = get_history(session_id)   # per-session, from Postgres - no global, no mixing
+def chat(user_id, question, session_id, doc_text=None, filename=None):
+    """One conversational turn for ONE user: resolve the follow-up, answer it, remember it."""
+    history = get_history(user_id, session_id)   # this user's session only - user_id comes from the token
     standalone = condense(question, history)   # memory applied BEFORE retrieval
     result = ask(standalone, doc_text, filename)   # full graph: route -> retrieve -> grade -> generate
     # {"answer": ..., "sources": [...]}
 
-    save_message(session_id, "user", question)   # store what the user actually typed, not the rewrite
-    save_message(session_id, "assistant", result["answer"], result["sources"])   # answer + the chunks it cited
+    save_message(user_id, session_id, "user", question)   # store what the user actually typed, not the rewrite
+    save_message(user_id, session_id, "assistant", result["answer"], result["sources"])   # answer + the chunks it cited
     return result
 
 if __name__ == "__main__":
     import uuid
-    from ..database import init_db
+    from ..database import init_db, create_user
 
     init_db()
     sid = f"selftest-{uuid.uuid4()}"     # isolated session, so reruns start with empty memory
+    uid = create_user(f"selftest-{uuid.uuid4()}@example.com", "longenough")    # FK: must be a real user
 
     q1 = "What is the GST registration threshold?"
-    a1 = chat(q1, sid)
+    a1 = chat(uid, q1, sid)
     print(f"Q1: {q1}\nA1: {a1['answer']}\nSOURCES: {a1['sources']}\n")
 
     q2 = "And for services?"
-    standalone = condense(q2, get_history(sid))   # extra call, only so we can SEE the rewrite
+    standalone = condense(q2, get_history(uid, sid))   # extra call, only so we can SEE the rewrite
     print(f"Q2: {q2}\nREWRITTEN: {standalone}\n")
     assert "GST" in standalone, "condense lost the topic from history"
 
-    a2 = chat(q2, sid)
+    a2 = chat(uid, q2, sid)
     print(f"A2: {a2['answer']}\nSOURCES: {a2['sources']}\n")
     assert "don't have enough information" not in a2["answer"], "follow-up broke retrieval"
 
-    assert len(get_history(sid)) == 4, "turns not persisted as 2 rows each"
+    assert len(get_history(uid, sid)) == 4, "turns not persisted as 2 rows each"
 
     print("OK - follow-up resolved + answered")
