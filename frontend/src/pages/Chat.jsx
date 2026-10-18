@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import MessageBubble from "../components/MessageBubble";
 
-function Chat() {
+function Chat({ token, onLogout }) {
   // the whiteboard: every message so far
   // each item: {role: "user" | "assistant", text: "..." }
   const [messages, setMessages] = useState([]);
@@ -36,7 +36,10 @@ function Chat() {
   useEffect(() => {
     async function loadHistory() {
       try {
-        const res = await fetch(`http://localhost:8000/history/${sessionId}`);
+        const res = await fetch(`http://localhost:8000/history/${sessionId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401) return onLogout();   // expired/invalid pass -> back to the gate
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const rows = await res.json();     // [{role, content, sources}, ...]  -- note: content, not text
         setMessages(rows.map((r) => ({ role: r.role, text: r.content, sources: r.sources })))
@@ -98,7 +101,10 @@ function Chat() {
     try {
       const res = await fetch("http://localhost:8000/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           question,
           session_id : sessionId,
@@ -106,6 +112,7 @@ function Chat() {
           filename: doc?.filename,
         }),
       });
+      if (res.status === 401) return onLogout();
       if (!res.ok) throw new Error(`HTTP ${res.status}`);     // fetch won't do this for us
       const data = await res.json();        // { answer, sources }
       setMessages((prev) => [
