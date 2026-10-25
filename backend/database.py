@@ -91,6 +91,21 @@ def get_history(user_id, session_id, limit=10):
         )
         return cur.fetchall()[::-1]      # newest-first from SQL, flipped back to reading order
 
+def get_sessions(user_id):
+    """One row per chat for ONE user, newest first: (session_id, title, last_at). Title = first question, cut at 40."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT session_id,
+                      LEFT((array_agg(content ORDER BY created_at) FILTER (WHERE role = 'user'))[1], 40) AS title,
+                      MAX(created_at) AS last_at
+               FROM messages
+               WHERE user_id = %s
+               GROUP BY session_id
+               ORDER BY last_at DESC""",
+            (user_id,),
+        )
+        return cur.fetchall()
+
 if __name__ == "__main__":
     import uuid
 
@@ -117,6 +132,12 @@ if __name__ == "__main__":
     assert get_history(owner, f"other-{uuid.uuid4()}") == [], "session filter leaked rows"
     # The S3 test: right session_id, wrong person -> nothing. Not a 404, not a error - just empty.
     assert get_history(stranger, sid) == [], "user filter leaked rows - a stranger read someone else's chat"
+
+    # sidebar (S1): owner sees this chat titled by the QUESTION, stranger sees nothing
+    sessions = get_sessions(owner)
+    assert sessions[0][0] == sid, "newest chat is not on top"
+    assert sessions[0][1] == "What is the GST registration threshold?"[:40], "title is not the first user message"
+    assert get_sessions(stranger) == [], "sidebar leaked a stranger's chats"
     
     print("OK - write, read, order, isolation")
 
