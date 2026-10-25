@@ -1,9 +1,10 @@
 """The /chat counter. Owns its request/response shapes and nothing else."""
 
 from fastapi import APIRouter, Depends
+from datetime import datetime
 from pydantic import BaseModel, Field
 from ..rag.chat import chat
-from ..database import get_history
+from ..database import get_history, get_sessions
 from .auth import current_user
 
 router = APIRouter()
@@ -38,3 +39,15 @@ def history_route(session_id: str, limit: int = 20, user_id: int = Depends(curre
     """Withdrawal window: your token + a session_id -> that session's messages, oldest first. someone else's id -> []."""
     rows = get_history(user_id, session_id, limit)
     return [{"role": role, "content": content, "sources": sources or []} for role, content, sources in rows]
+
+class SessionSummary(BaseModel):
+    session_id: str
+    title: str | None  # First question cut at 40; None only if a chat somehow has no user row
+    last_at: datetime  # Pydantic sends it as an ISO string
+
+@router.get("/sessions", response_model=list[SessionSummary])
+def sessions_route(user_id: int = Depends(current_user)):
+    """Sidebar list: your chats only, newest first. No token -> 401, no chat -> []."""
+    rows = get_sessions(user_id)
+    return [{"session_id": sid, "title": title, "last_at": last_at} for sid, title, last_at in rows]
+
