@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import MessageBubble from "../components/MessageBubble";
 
-function Chat({ token, onLogout }) {
+function Chat({ token, sessionId, onLogout, onSent }) {
   // the whiteboard: every message so far
   // each item: {role: "user" | "assistant", text: "..." }
   const [messages, setMessages] = useState([]);
@@ -13,17 +13,7 @@ function Chat({ token, onLogout }) {
 
   // parking ticket for the empty div at the bottom of the list
   const bottomRef = useRef(null);
-
-  // one session id for the whole conversation, now surviving refresh.
-  // localStorage holds only the KEY -- the messages themselves live the Postgres.
-  const [sessionId, setSessionId] = useState(() => {
-    const saved = localStorage.getItem("sessionId");
-    if (saved) return saved;
-    const fresh = crypto.randomUUID();
-    localStorage.setItem("sessionId", fresh);
-    return fresh;
-  });
-
+  
   const [loading, setLoading] = useState(false);
 
   // the attached Form 16 lives HERE, in the browser, for as long as the tab is open.
@@ -32,7 +22,7 @@ function Chat({ token, onLogout }) {
   const [uploading, setUploading] = useState(false);
 
   // on mount: ask the server what this session already said.
-  // [] = run once. Postgres is the source of truth; React just mirrors it.
+  // [] = run once PER MOUNT. App remounts us (key={sessionId}) on every chat switch.
   useEffect(() => {
     async function loadHistory() {
       try {
@@ -56,16 +46,6 @@ function Chat({ token, onLogout }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
-
-  // new chat = a new key, not a delete. The old rows stay in Postgres,
-  // keyed by an id nobody holds any more - unreachable, and cheap to keep.
-  function newChat() {
-    const fresh = crypto.randomUUID();
-    localStorage.setItem("sessionId", fresh);
-    setSessionId(fresh);
-    setMessages([]);      // the mount effect deps are [] - it will not refetch for us
-    setDoc(null);         // new conversation, old payslip goes with it 
-  }
 
   async function handleUpload(e){
     const file = e.target.files[0];
@@ -115,6 +95,7 @@ function Chat({ token, onLogout }) {
       if (res.status === 401) return onLogout();
       if (!res.ok) throw new Error(`HTTP ${res.status}`);     // fetch won't do this for us
       const data = await res.json();        // { answer, sources }
+      onSent();    // row is in Postgres now -> App refetches the sidebar
       setMessages((prev) => [
         ...prev,
         { role: "assistant", text: data.answer, sources:data.sources },
@@ -134,12 +115,6 @@ function Chat({ token, onLogout }) {
       <div className="w-full max-w-2xl bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold">Indian Tax Assistant</h1>
-          <button
-            onClick={newChat}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            New chat
-          </button>
         </div>
 
         {/* the conversation */}
