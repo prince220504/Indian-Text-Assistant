@@ -133,6 +133,11 @@ def generate_node(state: GraphState):
     ]
 
     raw = llm.invoke(messages).content
+
+    # attached doc: strip any [n] so it never leaks into prose, but skip the citation
+    # mapping - ask() drops these docs anyway, and its no-markers warning would fire every time.
+    if state.get("doc_text"):
+        return {"answer": CITE_RE.sub("", raw).strip()}
     clean, used = split_citations(raw, state["documents"])
 
     # a refusal has no facts, so it has nothing to cite. Without this, split_citations'
@@ -254,5 +259,6 @@ if __name__ == "__main__":
     assert "1450000" in e["answer"].replace(",", ""), "did not read the attached document"
     assert "don't have enough information" not in e["answer"], "refused a question its own context answers"
     assert e["sources"] == [], "attached doc has no page metadata - must cite nothing"
+    assert not CITE_RE.search(e["answer"]), "citation marker leaked into the Form-16 answer"
 
     print("OK - graph matches the Day 7 pipeline")
