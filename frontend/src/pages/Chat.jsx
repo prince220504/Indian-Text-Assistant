@@ -1,38 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import MessageBubble from "../components/MessageBubble";
+import Icon from "../components/Icon";
+import { API } from "../api";
+
+// shown on an empty chat; a click puts the question in the box, the user still presses Send
+const EXAMPLES = [
+  "Is income up to ₹12 lakh tax-free under the new regime?",
+  "When do I have to register for GST as a freelancer?",
+  "What is the TDS rate on rent paid by a business?",
+];
 
 function Chat({ token, sessionId, onLogout, onSent }) {
   // the whiteboard: every message so far
-  // each item: {role: "user" | "assistant", text: "..." }
+  // each item: {role: "user" | "assistant", text: "...", sources?, error? }
   const [messages, setMessages] = useState([]);
 
   // what's currently typed in the input box
-  const [input, setInput] = useState("");
+  // a question typed on the landing page before sign-up waits here, never auto-sent
+  const [input, setInput] = useState(() => sessionStorage.getItem("pendingQuestion") ?? "");
+  const inputRef = useRef(null);
+  useEffect(() => { sessionStorage.removeItem("pendingQuestion"); }, []);
 
-  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   // parking ticket for the empty div at the bottom of the list
   const bottomRef = useRef(null);
-  
+
   const [loading, setLoading] = useState(false);
 
   // the attached Form 16 lives HERE, in the browser, for as long as the tab is open.
-  // Never stored server-side -- the session_id debt means the DB isn't safe for a payslip.
+  // The file's text is never stored server-side (answers drawn from it are, like any answer).
   const [doc, setDoc] = useState(null);    // { filename, text } or null
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   // on mount: ask the server what this session already said.
   // [] = run once PER MOUNT. App remounts us (key={sessionId}) on every chat switch.
   useEffect(() => {
     async function loadHistory() {
       try {
-        const res = await fetch(`http://localhost:8000/history/${sessionId}`, {
+        const res = await fetch(`${API}/history/${sessionId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.status === 401) return onLogout();   // expired/invalid pass -> back to the gate
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const rows = await res.json();     // [{role, content, sources}, ...]  -- note: content, not text
-        setMessages(rows.map((r) => ({ role: r.role, text: r.content, sources: r.sources })))
+        setMessages(rows.map((r) => ({ role: r.role, text: r.content, sources: r.sources })));
       } catch (err) {
         console.error("history load failed:", err);    // empty chat is a survivable failure
       } finally {
@@ -42,27 +55,39 @@ function Chat({ token, sessionId, onLogout, onSent }) {
     loadHistory();
   }, []);
 
-  //  scroll to newest whenever the list grows or the spinner toggles
+  // the message just before the newest one = the question a fresh answer belongs to
+  const questionRef = useRef(null);
+
+  // answer arrived -> pin its question to the top, answer reads top-down below it; otherwise follow the bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!loading && messages.at(-1)?.role === "assistant" && questionRef.current) {
+      questionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   }, [messages, loading]);
 
-  async function handleUpload(e){
+  async function handleUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    try{
+    setUploadError("");
+    try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("http://localhost:8000/upload", {
+      const res = await fetch(`${API}/upload`, {
         method: "POST",
         body: form,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        // 400/413 carry a readable detail string from the backend
+        const data = await res.json().catch(() => ({}));
+        throw new Error(typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`);
+      }
       const data = await res.json();
-      setDoc({ filename: data.filename, text:data.text });
-    } catch(err) {
-      alert(`Upload failed: ${err.message}`);    // ponytail: alert, real toast when there are 3 of them
+      setDoc({ filename: data.filename, text: data.text });
+    } catch (err) {
+      setUploadError(`Couldn’t read that PDF: ${err.message}`);
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -74,12 +99,12 @@ function Chat({ token, sessionId, onLogout, onSent }) {
     if (!input.trim() || loading) return;      // no double-send while one is in flight
 
     const question = input;
-    setMessages((prev) => [...prev, {role: "user", text:question }]);   // NEW array, not push
+    setMessages((prev) => [...prev, { role: "user", text: question }]);   // NEW array, not push
     setInput("");
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/chat", {
+      const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -87,8 +112,8 @@ function Chat({ token, sessionId, onLogout, onSent }) {
         },
         body: JSON.stringify({
           question,
-          session_id : sessionId,
-          doc_text: doc?.text,     // undefined when nothing attached -> key  omitted by stringify
+          session_id: sessionId,
+          doc_text: doc?.text,     // undefined when nothing attached -> key omitted by stringify
           filename: doc?.filename,
         }),
       });
@@ -98,72 +123,109 @@ function Chat({ token, sessionId, onLogout, onSent }) {
       onSent();    // row is in Postgres now -> App refetches the sidebar
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: data.answer, sources:data.sources },
+        { role: "assistant", text: data.answer, sources: data.sources },
       ]);
-    } catch (err){
+    } catch (err) {
       setMessages((prev) => [
         ...prev,
-        { role:"assistant", text: `Error: ${err.message}` },
+        { role: "assistant", error: true, text: `That question didn’t go through (${err.message}). Check your connection and send it again.` },
       ]);
     } finally {
       setLoading(false);   // runs on success AND on failure -- never leave it stuck spinning
     }
   }
 
+  function pickExample(q) {
+    setInput(q);
+    inputRef.current?.focus();
+  }
+
+  const empty = !historyLoading && messages.length === 0;
+
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="w-full max-w-2xl bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold">Indian Tax Assistant</h1>
-        </div>
+    <div className="chat">
+      <div className="thread">
+        {historyLoading && (
+          <div className="skeleton" aria-label="Loading this chat">
+            <span /><span /><span />
+          </div>
+        )}
 
-        {/* the conversation */}
-        <div className="space-y-3 mb-4 min-h-[200px]">
-          {historyLoading && <p className="text-gray-400">Loading history...</p>}
-          {messages.map((m, i) => (
-            <MessageBubble key={i} message={m} />
-          ))}
-          <div ref={bottomRef} />
-        </div>
+        {empty && (
+          <div className="empty">
+            <h1>What do you want to know?</h1>
+            <p>Ask about GST, income tax or TDS. Each answer lists the document and page it came from.</p>
+            <ul className="examples">
+              {EXAMPLES.map((q) => (
+                <li key={q}>
+                  <button type="button" onClick={() => pickExample(q)}>{q}</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-        {/* attachment row */}
-        <div className="flex items-center gap-2 mb-2 text-sm">
-          {doc ? (
-            <span className="flex items-center gap-2 bg-blue-50 text-blue-800 px-2 py-1 rounded">
-              @ {doc.filename}
-              {/* without this it submits the form  */}
-              <button type="button"    
-               onClick={() => setDoc(null)} 
-               className="text-blue-600 hover:text-red-600">
-                X
-              </button>
-            </span>
-          ): (
-            <label className="text-gray-500">
-              Attach Form 16 (PDF): {" "}
-              <input type="file" accept="application/pdf" onChange={handleUpload} disabled={uploading} />
+        {messages.map((m, i) => (
+          <MessageBubble key={i} message={m} ref={i === messages.length - 2 ? questionRef : null} />
+        ))}
+
+        {loading && (
+          <div className="thinking" role="status">
+            <span className="thinking__bar keep-motion" aria-hidden="true" />
+            Reading the documents…
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="composer-wrap">
+        <form className="composer" onSubmit={handleSubmit}>
+          <div className="composer__meta">
+            {doc ? (
+              <span className="chip">
+                Attached: {doc.filename}
+                {/* type="button" -- without it this submits the form */}
+                <button type="button" onClick={() => setDoc(null)} aria-label={`Remove ${doc.filename}`}>
+                  <Icon name="close" />
+                </button>
+              </span>
+            ) : uploading ? (
+              <span role="status">Reading your PDF…</span>
+            ) : uploadError ? (
+              <span className="field-help--error" role="alert">{uploadError}</span>
+            ) : (
+              <span>Attach a Form 16 PDF to ask about your own numbers.</span>
+            )}
+          </div>
+
+          <div className="composer__row">
+            <label className="attach" aria-disabled={uploading} title="Attach Form 16 (PDF)">
+              <Icon name="clip" />
+              <span className="visually-hidden">Attach Form 16 (PDF)</span>
+              <input
+                type="file" accept="application/pdf" className="visually-hidden"
+                onChange={handleUpload} disabled={uploading}
+              />
             </label>
-          )}
-          {uploading && <span className="text-gray-400">reading PDF...</span>}
-        </div>
-
-        {/* the composer */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input 
-            className="flex-1 border rounded-lg px-3 py-2"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a GST question..."
-          />
-          <button 
-            disabled={loading} 
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg disabled:bg-gray-400">
-              {loading ? "..." : "Send"}
-          </button>
+            <label htmlFor="question" className="visually-hidden">Your question</label>
+            <input
+              id="question"
+              ref={inputRef}
+              className="input"
+              name="question"
+              autoComplete="off"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={doc ? "Ask about your Form 16…" : "Ask a tax question…"}
+            />
+            <button type="submit" className="btn btn--primary" disabled={loading}>
+              {loading ? "Sending…" : "Send"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
   );
 }
 
-export default Chat
+export default Chat;

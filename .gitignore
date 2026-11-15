@@ -20,3 +20,6 @@ dist/
 claude-help/
 CLAUDE.md
 PROJECT_LOG.md
+PRODUCT.md
+.hallmark/
+.impeccable/
